@@ -1,13 +1,26 @@
-const crypto = require('crypto');
+/* This file defines our schema and model interface for the account data.
+
+   We first import bcrypt and mongoose into the file. bcrypt is an industry
+   standard tool for encrypting passwords. Mongoose is our tool for
+   interacting with our mongo database.
+*/
+const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 
-mongoose.Promise = global.Promise;
+/* When generating a password hash, bcrypt (and most other password hash
+   functions) use a "salt". The salt is simply extra data that gets hashed
+   along with the password. The addition of the salt makes it more difficult
+   for people to decrypt the passwords stored in our database. saltRounds
+   essentially defines the number of times we will hash the password and salt.
+*/
+const saltRounds = 10;
 
 let AccountModel = {};
-const iterations = 10000;
-const saltLength = 64;
-const keyLength = 64;
 
+/* Our schema defines the data we will store. A username (string of alphanumeric
+   characters), a password (actually the hashed version of the password created
+   by bcrypt), and the created date.
+*/
 const AccountSchema = new mongoose.Schema({
   username: {
     type: String,
@@ -15,10 +28,6 @@ const AccountSchema = new mongoose.Schema({
     trim: true,
     unique: true,
     match: /^[A-Za-z0-9_\-.]{1,16}$/,
-  },
-  salt: {
-    type: Buffer,
-    required: true,
   },
   password: {
     type: String,
@@ -30,58 +39,38 @@ const AccountSchema = new mongoose.Schema({
   },
 });
 
+// Converts a doc to something we can store in redis later on.
 AccountSchema.statics.toAPI = (doc) => ({
-  // _id is built into your mongo document and is guaranteed to be unique
   username: doc.username,
   _id: doc._id,
 });
 
-const validatePassword = (doc, password, callback) => {
-  const pass = doc.password;
+// Helper function to hash a password
+AccountSchema.statics.generateHash = (password) => bcrypt.hash(password, saltRounds);
 
-  return crypto.pbkdf2(password, doc.salt, iterations, keyLength, 'RSA-SHA512', (err, hash) => {
-    if (hash.toString('hex') !== pass) {
-      return callback(false);
-    }
-    return callback(true);
-  });
-};
-
-AccountSchema.statics.findByUsername = (name, callback) => {
-  const search = {
-    username: name,
-  };
-
-  return AccountModel.findOne(search, callback);
-};
-
-AccountSchema.statics.generateHash = (password, callback) => {
-  const salt = crypto.randomBytes(saltLength);
-
-  crypto.pbkdf2(password, salt, iterations, keyLength, 'RSA-SHA512', (err, hash) => callback(salt, hash.toString('hex')));
-};
-
-AccountSchema.statics.authenticate = (username, password, callback) => {
-  AccountModel.findByUsername(username, (err, doc) => {
-    if (err) {
-      return callback(err);
-    }
-
-    if (!doc) {
+/* Helper function for authenticating a password against one already in the
+   database. Essentially when a user logs in, we need to verify that the password
+   they entered matches the one in the database. Since the database stores hashed
+   passwords, we need to get the hash they have stored. We then pass the given password
+   and hashed password to bcrypt's compare function. The compare function hashes the
+   given password the same number of times as the stored password and compares the result.
+*/
+AccountSchema.statics.authenticate = async (username, password, callback) => {
+  try {
+    const doc = await AccountModel.findOne({username}).exec();
+    if(!doc) {
       return callback();
     }
 
-    return validatePassword(doc, password, (result) => {
-      if (result === true) {
-        return callback(null, doc);
-      }
-
-      return callback();
-    });
-  });
+    const match = await bcrypt.compare(password, doc.password);
+    if (match) {
+      return callback(null, doc);
+    }
+    return callback();
+  } catch (err) {
+    return callback(err);
+  }
 };
 
 AccountModel = mongoose.model('Account', AccountSchema);
-
-module.exports.AccountModel = AccountModel;
-module.exports.AccountSchema = AccountSchema;
+module.exports = AccountModel;

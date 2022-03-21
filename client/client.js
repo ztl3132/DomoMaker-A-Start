@@ -1,76 +1,120 @@
+/* Takes in an error message. Sets the error message up in html, and
+   displays it to the user. Will be hidden by other events that could
+   end in an error.
+*/
 const handleError = (message) => {
-  $("#errorMessage").text(message);
-  $("#domoMessage").animate({width:'toggle'},350);
-}
+  document.getElementById('errorMessage').textContent = message;
+  document.getElementById('domoMessage').classList.remove('hidden');
+};
 
-const sendAjax = (action, data) => {
-  $.ajax({
-    cache: false,
-    type: "POST",
-    url: action,
-    data: data,
-    dataType: "json",
-    success: (result, status, xhr) => {
-      $("#domoMessage").animate({width:'hide'},350);
-
-      window.location = result.redirect;
+/* Sends post requests to the server using fetch. Will look for various
+   entries in the response JSON object, and will handle them appropriately.
+*/
+const sendPost = async (url, data) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
     },
-    error: (xhr, status, error) => {
-      const messageObj = JSON.parse(xhr.responseText);
-
-      handleError(messageObj.error);
-    }
-  });        
-}
-
-$(document).ready(() => {
-  $("#signupForm").on("submit", (e) => {
-    e.preventDefault();
-
-    $("#domoMessage").animate({width:'hide'},350);
-
-    if($("#user").val() == '' || $("#pass").val() == '' || $("#pass2").val() == '') {
-      handleError("RAWR! All fields are required");
-      return false;
-    }
-
-    if($("#pass").val() !== $("#pass2").val()) {
-      handleError("RAWR! Passwords do not match");
-      return false;           
-    }
-
-    sendAjax($("#signupForm").attr("action"), $("#signupForm").serialize());
-
-    return false;
+    body: JSON.stringify(data),
   });
 
-  $("#loginForm").on("submit", (e) => {
-    e.preventDefault();
+  const result = await response.json();
+  document.getElementById('domoMessage').classList.add('hidden');
 
-    $("#domoMessage").animate({width:'hide'},350);
+  if(result.redirect) {
+    window.location = result.redirect;
+  }
 
-    if($("#user").val() == '' || $("#pass").val() == '') {
-      handleError("RAWR! Username or password is empty");
+  if(result.error) {
+    handleError(result.error);
+  }
+};
+
+/* Entry point of our client code. Runs when window.onload fires.
+   Sets up the event listeners for each form across the whole app.
+*/
+const init = () => {
+  const signupForm = document.getElementById('signupForm');
+  const loginForm = document.getElementById('loginForm');
+  const domoForm = document.getElementById('domoForm');
+  const domoMessage = document.getElementById('domoMessage');
+
+  /* If this page has the signupForm, add it's submit event listener.
+     Event listener will grab the username, password, and password2
+     from the form, validate everything is correct, and then will
+     use sendPost to send the data to the server.
+  */
+  if(signupForm) {
+    signupForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      domoMessage.classList.add('hidden');
+
+      const username = signupForm.querySelector('#user').value;
+      const pass = signupForm.querySelector('#pass').value;
+      const pass2 = signupForm.querySelector('#pass2').value;
+
+      if(!username || !pass || !pass2) {
+        handleError('All fields are required!');
+        return false;
+      } 
+
+      if(pass !== pass2) {
+        handleError('Passwords do not match!');
+        return false;
+      }
+
+      sendPost(signupForm.getAttribute('action'), {username, pass, pass2});
       return false;
-    }
+    });
+  }
 
-    sendAjax($("#loginForm").attr("action"), $("#loginForm").serialize());
+  /* If this page has the loginForm, add it's submit event listener.
+     Event listener will grab the username, password, from the form, 
+     validate both values have been entered, and will use sendPost 
+     to send the data to the server.
+  */
+  if(loginForm) {
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      domoMessage.classList.add('hidden');
 
-    return false;
-  });
-  
-  $("#domoForm").on("submit", (e) => {
-    e.preventDefault();
+      const username = loginForm.querySelector('#user').value;
+      const pass = loginForm.querySelector('#pass').value;
 
-    $("#domoMessage").animate({width:'hide'},350);
+      if(!username || !pass) {
+        handleError('Username or password is empty!');
+        return false;
+      }
 
-    if($("#domoName").val() == '' || $("#domoAge").val() == '') {
-      handleError("RAWR! All fields are required");
+      sendPost(loginForm.getAttribute('action'), {username, pass});
       return false;
-    }
+    });
+  }
 
-    sendAjax($("#domoForm").attr("action"), $("#domoForm").serialize());
+  /* If this page has the domoForm, add it's submit event listener.
+     Event listener will grab the domo name and the domo age from
+     the form. It will throw an error if one or both are missing.
+     Otherwise, it will send the request to the server.
+  */
+  if(domoForm) {
+    domoForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      domoMessage.classList.add('hidden');
 
-    return false;
-  });
-});
+      const name = domoForm.querySelector('#domoName').value;
+      const age = domoForm.querySelector('#domoAge').value;
+
+      if(!domoName || !domoAge) {
+        handleError('All fields are required!');
+        return false;
+      }
+
+      sendPost(domoForm.getAttribute('action'), {name, age});
+      return false;
+    });
+  }
+};
+
+// Call init when the window loads.
+window.onload = init;
