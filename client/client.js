@@ -105,7 +105,7 @@ const init = () => {
       const name = domoForm.querySelector('#domoName').value;
       const age = domoForm.querySelector('#domoAge').value;
 
-      if(!domoName || !domoAge) {
+      if(!name || !age) {
         handleError('All fields are required!');
         return false;
       }
